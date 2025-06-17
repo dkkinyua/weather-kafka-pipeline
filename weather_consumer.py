@@ -26,15 +26,8 @@ consumer_config = {
 consumer = Consumer(consumer_config)
 consumer.subscribe([TOPIC])
 
-def load_to_db(weather):
+def load_to_db(weather, conn, cur):
     try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USERNAME"),
-            password=os.getenv("DB_PWD")
-        )
-        cur = conn.cursor()
         cur.execute(
             """
             INSERT INTO african_weather_data (city, description, temperature, timestamp)
@@ -43,28 +36,38 @@ def load_to_db(weather):
             (weather['city'], weather['description'], weather['temperature'], weather['timestamp'])
         )
         conn.commit()
-        cur.close()
-        conn.close()
-        print(f"Inserted weather data for {weather['city']} into DB.")
     except Exception as e:
         print(f"Database error: {e}")
 
 def consume_data(consumer):
-    while True:
-        msg = consumer.poll(1.0) # poll data for 1 second before consuming again
-        if not msg:
-            continue
-        if msg.error():
-            print(f"Consumer error: {msg.error()}")
-            continue
-        weather = json.loads(msg.value().decode('utf-8'))
-        print(weather)
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USERNAME"),
+            password=os.getenv("DB_PWD"),
+            sslmode='require'
+        )
+        cur = conn.cursor()
 
-        try:
-            load_to_db(weather)
-            print(f"{weather['city']}, loaded to db at {weather['timestamp']}")
-        except Exception as e:
-            print(f"Loading to db error: {e}")
+        while True:
+            msg = consumer.poll(1.0)
+            if not msg:
+                continue
+            if msg.error():
+                print(f"Consumer error: {msg.error()}")
+                continue
+            try:
+                weather = json.loads(msg.value().decode('utf-8'))
+                load_to_db(weather, conn, cur)
+                print(f"{weather['city']} loaded into db at {weather['timestamp']}")
+            except Exception as e:
+                print(f"Error processing message: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
 
 if __name__ == '__main__':
     consume_data(consumer)

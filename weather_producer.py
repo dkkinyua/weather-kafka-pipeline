@@ -24,23 +24,29 @@ producer_config = {
 
 producer = Producer(producer_config)
 
-cities = ['Nairobi', 'Pretoria', 'Cairo', 'Lagos', 'Mombasa']
+cities = [('Nairobi', 'KE'), ('Pretoria', 'ZA'), ('Cairo', 'EG'), ('Lagos', 'NG'), ('Dar es Salaam', 'TZ')]
 
-def produce_data(city):
-    url = f'https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_KEY}'
-    data = requests.get(url).json()
-    return {
-        "city": city,
-        "timestamp": int(time.time()),
-        "temperature": data["main"]["temp"],
-        "description": data["weather"][0]["description"]
-    }
+def produce_data(city, country):
+    #https://api.openweathermap.org/data/2.5/weather?q={city name},{country code}&appid={API key}
+    url = f'https://api.openweathermap.org/data/2.5/weather?q={city},{country}&appid={OPENWEATHER_KEY}'
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        return {
+            "city": city,
+            "country": country,
+            "timestamp": int(time.time()),
+            "temperature": data["main"]["temp"],
+            "description": data["weather"][0]["description"]
+        }
+    else:
+        print(f"Requests to API error: {response.status_code}, {response.text}")
     
 if __name__ == '__main__':
     while True:
-        for city in cities:
-            weather = produce_data(city)
+        for city, country in cities:
+            weather = produce_data(city, country)
             print(f"Weather: {weather}")
             producer.produce(TOPIC, json.dumps(weather).encode('utf-8'))
             producer.flush()
-        print("Data sent successfully!")
+        time.sleep(3) # sleep for 3s before making another request
